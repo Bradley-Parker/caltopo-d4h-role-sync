@@ -1,9 +1,13 @@
 """
 Load and save audit persistence files (JSON + static Python exceptions).
 
-Guided mode writes confirmed D4H id -> CalTopo id links to audit_exceptions.json.
-Legacy member_links.json is still read if present. Static shared-account rules live in
-audit_exceptions.py and are merged with JSON "ignore" entries at runtime.
+Default exceptions path is ``./audit_exceptions.json`` (cwd), or an explicit
+path / ``CALTOPO_EXCEPTIONS_PATH``. Missing files are not created: load returns
+an empty in-memory document; save refuses unless the path already exists.
+Guided mode must pass an existing file.
+
+Legacy member_links.json is still read if present. Static shared-account rules
+live in audit_exceptions.py and are merged with JSON "ignore" entries at runtime.
 """
 
 from __future__ import annotations
@@ -35,6 +39,7 @@ def default_exceptions_document() -> dict[str, Any]:
 
 
 def load_exceptions_document(path: Path = DEFAULT_EXCEPTIONS_PATH) -> dict[str, Any]:
+    """Load JSON from ``path``. Missing file → empty in-memory doc (does not create)."""
     if not path.is_file():
         return default_exceptions_document()
     raw = json.loads(path.read_text(encoding="utf-8"))
@@ -51,6 +56,11 @@ def load_exceptions_document(path: Path = DEFAULT_EXCEPTIONS_PATH) -> dict[str, 
 
 
 def save_exceptions_document(doc: dict[str, Any], path: Path = DEFAULT_EXCEPTIONS_PATH) -> None:
+    """Update an existing exceptions file. Never creates a new path unprompted."""
+    if not path.is_file():
+        raise FileNotFoundError(
+            f"exceptions file does not exist (refusing to create): {path}"
+        )
     path.write_text(json.dumps(doc, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 

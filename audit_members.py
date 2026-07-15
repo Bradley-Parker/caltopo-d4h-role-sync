@@ -377,6 +377,8 @@ def print_audit_report(
     caltopo_size: int,
     links_count: int,
     buckets: dict[str, list[AuditRow]],
+    exceptions_path: Path | None = None,
+    exceptions_loaded: bool = True,
 ) -> None:
     print("=== CalTopo member audit (vs D4H operational + non-operational roster) ===")
     print(
@@ -384,6 +386,14 @@ def print_audit_report(
         "(OPERATIONAL or NON_OPERATIONAL)"
     )
     print(f"CalTopo team: {caltopo_team_id} -> {caltopo_size} members")
+    if exceptions_path is not None:
+        if exceptions_loaded:
+            print(f"Exceptions file: {exceptions_path} (loaded)")
+        else:
+            print(
+                f"Exceptions file: {exceptions_path} (MISSING — running with empty "
+                "links/ignores; more members may show as unmatched / extra_in_caltopo)"
+            )
     print(f"Stored links: {links_count}")
 
     print_section("Extra in CalTopo (not on D4H roster)", buckets.get("extra_in_caltopo", []))
@@ -664,13 +674,23 @@ def main() -> int:
     )
     parser.add_argument(
         "--exceptions",
-        default=str(DEFAULT_EXCEPTIONS_PATH),
-        help="Path to audit_exceptions.json (links + ignore entries)",
+        default=(
+            os.environ.get("CALTOPO_EXCEPTIONS_PATH")
+            or str(DEFAULT_EXCEPTIONS_PATH)
+        ),
+        help=(
+            "Existing audit_exceptions.json (links + ignore). "
+            "Default: CALTOPO_EXCEPTIONS_PATH or ./audit_exceptions.json (cwd). "
+            "Does not create the file."
+        ),
     )
     parser.add_argument(
         "--guided",
         action="store_true",
-        help="Prompt interactively for review rows and save to audit_exceptions.json",
+        help=(
+            "Prompt interactively for review rows and save to --exceptions "
+            "(file must already exist)"
+        ),
     )
     args = parser.parse_args()
 
@@ -679,7 +699,26 @@ def main() -> int:
         return 2
 
     exceptions_path = Path(args.exceptions)
+    exceptions_loaded = exceptions_path.is_file()
     links_path = Path(args.links) if args.links else None
+
+    if args.guided and not exceptions_loaded:
+        print(
+            "Error: --guided requires an existing exceptions file to store links/"
+            f"ignores (refusing to create one):\n  {exceptions_path.resolve()}\n"
+            "Pass --exceptions PATH or create the JSON first, then re-run.",
+            file=sys.stderr,
+        )
+        return 2
+
+    if not exceptions_loaded:
+        print(
+            f"Warning: no exceptions file at {exceptions_path.resolve()}; "
+            "continuing with empty links/ignores. More CalTopo members may be "
+            "marked unmatched / extra_in_caltopo. Pass --exceptions PATH or "
+            "place audit_exceptions.json in the cwd.",
+            file=sys.stderr,
+        )
 
     try:
         d4h = D4HClient(
@@ -714,6 +753,8 @@ def main() -> int:
         caltopo_size=len(ct_members),
         links_count=len(links),
         buckets=buckets,
+        exceptions_path=exceptions_path,
+        exceptions_loaded=exceptions_loaded,
     )
 
     if args.guided:
@@ -740,6 +781,8 @@ def main() -> int:
                 caltopo_size=len(ct_members),
                 links_count=len(links),
                 buckets=buckets,
+                exceptions_path=exceptions_path,
+                exceptions_loaded=True,
             )
 
     review = sum(len(buckets.get(status, [])) for status in REVIEW_STATUSES)

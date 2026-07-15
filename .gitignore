@@ -225,3 +225,8 @@ venv37/**
 # Local org config (copy from config.example.yaml or clone private config repo)
 config.yaml 
 cyclonedx.xml
+
+# Org/runtime audit map — lives in sar_service_coordinator/config for ops;
+# copy audit_exceptions.example.json locally only for standalone CLI runs.
+audit_exceptions.json
+member_links.json
